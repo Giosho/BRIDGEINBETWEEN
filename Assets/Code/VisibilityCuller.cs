@@ -193,6 +193,7 @@ public class VisibilityCuller : MonoBehaviour
             // Skip things that must always draw.
             if (r is ParticleSystemRenderer || r is TrailRenderer || r is LineRenderer) continue;
             if (viewCamera != null && r.transform.IsChildOf(viewCamera.transform)) continue;
+            if (r.GetComponentInParent<ShadeObject>() != null) continue; // ShadeObject hides / shows these itself
 
             targets.Add(new Target { renderer = r, shown = r.enabled, lastSeenTime = Time.time });
         }

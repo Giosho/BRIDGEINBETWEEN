@@ -35,6 +35,13 @@ public class MouseLook3D : MonoBehaviour
         }
     }
 
+    /// <summary>Turn the player to face a direction (used by Teleporter). The look script owns the rotation.</summary>
+    public void SetYaw(float degrees)
+    {
+        yaw = degrees;
+        if (playerBody != null) playerBody.rotation = Quaternion.Euler(0f, yaw, 0f);
+    }
+
     void Update()
     {
         // Camera is frozen while rotating a held object (holding R)

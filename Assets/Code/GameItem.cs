@@ -47,6 +47,8 @@ public class GameItem : MonoBehaviour
     void Start()
     {
         startPos = transform.position;
+        if (GetComponentInChildren<Collider>(true) == null)
+            Debug.LogWarning($"GameItem '{itemName}' has no Collider, so it can't be picked up. Add one (tick Is Trigger).", this);
     }
 
     void Update()
@@ -58,6 +60,13 @@ public class GameItem : MonoBehaviour
             p.y += Mathf.Sin(Time.time * bobSpeed) * bobHeight;
             transform.position = p;
         }
+    }
+
+    void OnCollisionEnter(Collision collision)
+    {
+        // Works when the collider is NOT a trigger: touching it picks it up too.
+        if (!PlayerFinder.IsPlayer(collision.collider, playerTag)) return;
+        Collect(collision.gameObject);
     }
 
     void OnTriggerEnter(Collider other)

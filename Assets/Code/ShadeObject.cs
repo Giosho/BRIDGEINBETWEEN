@@ -47,7 +47,23 @@ public class ShadeObject : MonoBehaviour
 
     void Start()
     {
-        if (revealObject != null) revealObject.SetActive(false);
+        if (revealObject == null) { Debug.LogWarning("ShadeObject: 'Reveal Object' is empty, nothing will appear.", this); return; }
+        if (SelfHosted)
+            Debug.LogWarning("ShadeObject is on the same object as its Reveal Object. It works, but it is cleaner to put ShadeObject on a separate empty object.", this);
+        SetRevealed(false);
+    }
+
+    // True when the reveal object is this object or one of its parents. Switching such an object off
+    // would also switch this script off for good, so it is hidden by disabling renderers + colliders instead.
+    bool SelfHosted => revealObject != null && (revealObject == gameObject || transform.IsChildOf(revealObject.transform));
+
+    void SetRevealed(bool on)
+    {
+        if (revealObject == null) return;
+        if (!SelfHosted) { revealObject.SetActive(on); return; }
+
+        foreach (var r in revealObject.GetComponentsInChildren<Renderer>(true)) r.enabled = on;
+        foreach (var c in revealObject.GetComponentsInChildren<Collider>(true)) c.enabled = on;
     }
 
     /// <summary>The nearest matching spot within range (ground distance), or null. Used by GridPlacer to snap.</summary>
@@ -73,7 +89,7 @@ public class ShadeObject : MonoBehaviour
 
         shader = p;
         IsShaded = true;
-        if (revealObject != null) revealObject.SetActive(true);
+        SetRevealed(true);
         onShaded?.Invoke();
     }
 
@@ -83,7 +99,7 @@ public class ShadeObject : MonoBehaviour
 
         shader = null;
         IsShaded = false;
-        if (hideWhenRemoved && revealObject != null) revealObject.SetActive(false);
+        if (hideWhenRemoved) SetRevealed(false);
         onUnshaded?.Invoke();
     }
 

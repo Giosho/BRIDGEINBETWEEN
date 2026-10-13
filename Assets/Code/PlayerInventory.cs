@@ -28,7 +28,7 @@ public class PlayerInventory : MonoBehaviour
 
     void HandleCollected(GameItem item, GameObject collector)
     {
-        if (item.type == ItemType.Key && !string.IsNullOrEmpty(item.keyId) && collector.transform.IsChildOf(transform))
+        if (item.type == ItemType.Key && !string.IsNullOrEmpty(item.keyId))
         {
             Add(item.keyId);
             DialogUI.Instance.ShowNotice($"Picked up: {item.itemName}");

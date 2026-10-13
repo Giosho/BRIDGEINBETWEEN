@@ -54,6 +54,7 @@ public class GridPlacer : MonoBehaviour
     private bool showingPrompt;
     private float yaw;
     private readonly RaycastHit[] hitBuffer = new RaycastHit[32];
+    private readonly Collider[] overlapBuffer = new Collider[32];
 
     void Start()
     {
@@ -74,6 +75,7 @@ public class GridPlacer : MonoBehaviour
         {
             var h = hitBuffer[i];
             if (h.collider.transform.IsChildOf(transform)) continue;                     // the player itself
+            if (h.collider.GetComponentInParent<ShadeObject>() != null && h.collider.GetComponentInParent<PlaceableObject>() == null) continue; // treasure spot / key never block
             if (h.collider.isTrigger && !(includeTriggers && h.collider.GetComponentInParent<PlaceableObject>() != null)) continue;
             if (h.distance < best) { best = h.distance; result = h; found = true; }
         }
@@ -210,7 +212,16 @@ public class GridPlacer : MonoBehaviour
 
             Vector3 center = b.center + Vector3.up * 0.05f;
             Vector3 half = new Vector3(b.extents.x * 0.95f, Mathf.Max(0.01f, b.extents.y * 0.95f - 0.05f), b.extents.z * 0.95f);
-            canPlace = !Physics.CheckBox(center, half, Quaternion.identity, blockMask, QueryTriggerInteraction.Ignore);
+            int overlaps = Physics.OverlapBoxNonAlloc(center, half, overlapBuffer, Quaternion.identity, blockMask, QueryTriggerInteraction.Ignore);
+            canPlace = true;
+            for (int i = 0; i < overlaps; i++)
+            {
+                Collider c = overlapBuffer[i];
+                if (c.transform.IsChildOf(current.transform)) continue;
+                if (c.GetComponentInParent<ShadeObject>() != null) continue; // the treasure spot never blocks
+                canPlace = false;
+                break;
+            }
             if (debug && !canPlace && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 Debug.Log("GridPlacer: spot is blocked by another collider (red).");
         }
