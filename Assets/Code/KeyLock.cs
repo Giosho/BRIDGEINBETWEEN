@@ -35,9 +35,8 @@ public class KeyLock : MonoBehaviour
 
     void Start()
     {
-        if (playerCamera == null) playerCamera = Camera.main;
-        var p = GameObject.FindGameObjectWithTag(playerTag);
-        if (p != null) player = p.transform;
+        player = PlayerFinder.FindPlayer(playerTag);
+        if (playerCamera == null) playerCamera = PlayerFinder.FindCamera(player);
     }
 
     private bool showingPrompt;

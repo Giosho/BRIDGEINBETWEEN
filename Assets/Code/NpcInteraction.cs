@@ -117,10 +117,9 @@ public class NpcInteraction : MonoBehaviour
 
     void Start()
     {
-        if (playerCamera == null) playerCamera = Camera.main;
-        var p = GameObject.FindGameObjectWithTag(playerTag);
-        if (p != null) player = p.transform;
-        else Debug.LogWarning($"NpcInteraction ({npcName}): no object tagged \"{playerTag}\" found.", this);
+        player = PlayerFinder.FindPlayer(playerTag);
+        if (player == null) Debug.LogWarning($"NpcInteraction ({npcName}): player not found (no \"{playerTag}\" tag and no PlayerMovement).", this);
+        if (playerCamera == null) playerCamera = PlayerFinder.FindCamera(player);
     }
 
     void Update()

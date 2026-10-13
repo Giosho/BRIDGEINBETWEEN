@@ -52,7 +52,7 @@ public class GridPlacer : MonoBehaviour
 
     void Start()
     {
-        if (playerCamera == null) playerCamera = Camera.main;
+        if (playerCamera == null) playerCamera = PlayerFinder.FindCamera(transform);
     }
 
     void Update()

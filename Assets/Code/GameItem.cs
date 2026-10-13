@@ -62,7 +62,7 @@ public class GameItem : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        if (!other.CompareTag(playerTag)) return;
+        if (!PlayerFinder.IsPlayer(other, playerTag)) return;
         Collect(other.gameObject);
     }
 
