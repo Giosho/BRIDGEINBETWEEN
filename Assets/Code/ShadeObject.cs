@@ -24,6 +24,12 @@ public class ShadeObject : MonoBehaviour
     [Tooltip("Hide it again if the umbrella is picked back up (before it was collected).")]
     public bool hideWhenRemoved = true;
 
+    [Header("Remove when shaded")]
+    [Tooltip("Objects that disappear when the umbrella is placed, e.g. the treasure chest / mound the key is hidden in.")]
+    public GameObject[] removeWhenShaded;
+    [Tooltip("Bring them back if the umbrella is picked up again.")]
+    public bool restoreWhenRemoved = true;
+
     [Header("Events")]
     public UnityEvent onShaded;
     public UnityEvent onUnshaded;
@@ -45,8 +51,34 @@ public class ShadeObject : MonoBehaviour
         GridPlacer.OnRemoved -= HandleRemoved;
     }
 
+    // If the key (or this script) sits INSIDE an object that must disappear, move it out first,
+    // otherwise it would disappear together with that object.
+    void EscapeFromRemovedObjects()
+    {
+        if (removeWhenShaded == null) return;
+        foreach (var rm in removeWhenShaded)
+        {
+            if (rm == null) continue;
+            if (revealObject != null && revealObject != rm && revealObject.transform.IsChildOf(rm.transform))
+                revealObject.transform.SetParent(rm.transform.parent, true);
+            if (transform != rm.transform && transform.IsChildOf(rm.transform))
+                transform.SetParent(rm.transform.parent, true);
+        }
+    }
+
+    void SetRemoved(bool removed)
+    {
+        if (removeWhenShaded == null) return;
+        foreach (var rm in removeWhenShaded)
+        {
+            if (rm == null || rm == gameObject || rm == revealObject) continue;
+            rm.SetActive(!removed);
+        }
+    }
+
     void Start()
     {
+        EscapeFromRemovedObjects();
         if (revealObject == null) { Debug.LogWarning("ShadeObject: 'Reveal Object' is empty, nothing will appear.", this); return; }
         if (SelfHosted)
             Debug.LogWarning("ShadeObject is on the same object as its Reveal Object. It works, but it is cleaner to put ShadeObject on a separate empty object.", this);
@@ -89,6 +121,7 @@ public class ShadeObject : MonoBehaviour
 
         shader = p;
         IsShaded = true;
+        SetRemoved(true);
         SetRevealed(true);
         onShaded?.Invoke();
     }
@@ -100,6 +133,7 @@ public class ShadeObject : MonoBehaviour
         shader = null;
         IsShaded = false;
         if (hideWhenRemoved) SetRevealed(false);
+        if (restoreWhenRemoved) SetRemoved(false);
         onUnshaded?.Invoke();
     }
 
