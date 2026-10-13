@@ -8,6 +8,9 @@ using UnityEngine.InputSystem;
 public static class QuestFlags
 {
     private static readonly HashSet<string> flags = new HashSet<string>();
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { flags.Clear(); }
     public static bool Has(string flag) => string.IsNullOrEmpty(flag) || flags.Contains(flag);
     public static void Set(string flag) { if (!string.IsNullOrEmpty(flag)) flags.Add(flag); }
     public static void Clear() => flags.Clear();

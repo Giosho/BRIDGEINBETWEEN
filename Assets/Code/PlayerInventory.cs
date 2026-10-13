@@ -15,12 +15,21 @@ public class PlayerInventory : MonoBehaviour
     public event Action<string, bool> OnChanged;
 
     [SerializeField] private List<string> startingItems = new List<string>();
-    private readonly Dictionary<string, int> items = new Dictionary<string, int>();
+    // static: the bag survives scene changes (e.g. walking into the pyramid scene)
+    private static readonly Dictionary<string, int> items = new Dictionary<string, int>();
+    private static bool startingItemsGiven;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() { items.Clear(); startingItemsGiven = false; }
 
     void Awake()
     {
         Instance = this;
-        foreach (var id in startingItems) Add(id);
+        if (!startingItemsGiven)
+        {
+            startingItemsGiven = true;
+            foreach (var id in startingItems) Add(id);
+        }
     }
 
     void OnEnable() { GameItem.OnCollected += HandleCollected; }
