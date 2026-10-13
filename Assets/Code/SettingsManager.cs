@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 
 public class SettingsManager : MonoBehaviour
 {
@@ -9,6 +10,12 @@ public class SettingsManager : MonoBehaviour
 
     [Range(0.1f, 200f)]
     public float Sensitivity = 100f;
+
+    /// <summary>How far you can see in metres. Zero or less = not chosen yet, VisibilityCuller uses its own value.</summary>
+    public float ViewDistance = -1f;
+
+    /// <summary>Raised when the view distance changes (VisibilityCuller listens to this).</summary>
+    public static event Action<float> OnViewDistanceChanged;
 
     private void Awake()
     {
@@ -25,6 +32,7 @@ public class SettingsManager : MonoBehaviour
         // Load saved values
         Volume = PlayerPrefs.GetFloat("Volume", 1f);
         Sensitivity = PlayerPrefs.GetFloat("Sensitivity", 100f);
+        ViewDistance = PlayerPrefs.GetFloat("ViewDistance", -1f);
 
         ApplySettings();
     }
@@ -42,6 +50,13 @@ public class SettingsManager : MonoBehaviour
         PlayerPrefs.SetFloat("Sensitivity", value);
 
         
+    }
+
+    public void SetViewDistance(float value)
+    {
+        ViewDistance = value;
+        PlayerPrefs.SetFloat("ViewDistance", value);
+        OnViewDistanceChanged?.Invoke(value);
     }
 
     public void ApplySettings()
