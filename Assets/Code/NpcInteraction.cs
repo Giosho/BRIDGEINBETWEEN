@@ -1,77 +1,115 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
 
+/// <summary>Global yes/no switches any script can set and any NPC stage can wait for.</summary>
+public static class QuestFlags
+{
+    private static readonly HashSet<string> flags = new HashSet<string>();
+    public static bool Has(string flag) => string.IsNullOrEmpty(flag) || flags.Contains(flag);
+    public static void Set(string flag) { if (!string.IsNullOrEmpty(flag)) flags.Add(flag); }
+    public static void Clear() => flags.Clear();
+}
+
 /// <summary>
-/// An NPC the player can talk to (look at it, get close, press the Interact key - E by default).
-/// Pick what the NPC can do with "Mode":
-///  - DialogOnly: it can only talk. Shows "Dialog Lines" as captions, left click = next line, closes after the last.
-///  - KeyQuest:   puzzle NPC. Talks (Intro) -> player does the task -> CompleteGoal() is called ->
-///                player gets a Key Piece -> player talks to the NPC again -> NPC takes the piece and
-///                hands over the fixed key (e.g. for the pyramid door, see KeyLock).
-/// Needs a Collider on the NPC only if you want one; the player just needs the tag "Player".
+/// A reusable NPC. Look at it, get close, press E.
+///  - DialogOnly: only talks ("Dialog Lines").
+///  - Quest:      works through an ordered list of Stages. Each stage can wait for items and/or a flag,
+///                say lines, take items, give items, set a flag and fire a UnityEvent.
+///                After the last stage it says "Finished Lines" forever.
+/// Reuse it for anything: shopkeepers (take item A, give item B), hint givers, gatekeepers
+/// (wait for a flag), multi-step chains (add more stages).
 /// </summary>
 public class NpcInteraction : MonoBehaviour
 {
-    public enum NpcMode { DialogOnly, KeyQuest }
-    private enum Stage { Intro, WaitingForGoal, HasPiece, Done }
+    public enum NpcMode { DialogOnly, Quest }
+
+    [Serializable]
+    public class Stage
+    {
+        public string label = "Stage";
+        [Header("Requirements (all must be true to complete)")]
+        [Tooltip("Item ids the player must be carrying, e.g. KeyPiece.")]
+        public string[] requireItems;
+        [Tooltip("A QuestFlags flag that must be set. Empty = none.")]
+        public string requireFlag;
+
+        [Header("Dialog")]
+        [Tooltip("Said when the requirements are met. Left click = next line.")]
+        [TextArea(2, 4)] public string[] lines = { "..." };
+        [Tooltip("Said when the requirements are NOT met yet.")]
+        [TextArea(2, 4)] public string[] linesWhileWaiting;
+
+        [Header("When the dialog ends")]
+        [Tooltip("Items removed from the player.")]
+        public string[] takeItems;
+        [Tooltip("Items added to the player.")]
+        public string[] giveItems;
+        [Tooltip("Flag set for other scripts / NPCs to react to. Empty = none.")]
+        public string setFlag;
+        [Tooltip("Shown at the top of the screen, e.g. \"You got the Pyramid Key!\". Empty = none.")]
+        public string notice;
+        public UnityEvent onComplete;
+    }
 
     [Header("General")]
     public string npcName = "Villager";
-    [Tooltip("What this NPC can do.")]
     public NpcMode mode = NpcMode.DialogOnly;
     public string playerTag = "Player";
     public float interactRange = 3f;
-    [Tooltip("Player camera. Used to check the player is looking at the NPC. Defaults to Camera.main.")]
+    [Tooltip("Player camera, used to check the player is looking at the NPC. Defaults to Camera.main.")]
     public Camera playerCamera;
     [Range(-1f, 1f)] public float lookDot = 0.6f;
-    [Tooltip("Optional: your input actions asset (uses the Gameplay/Interact action). Empty = the E key.")]
+    [Tooltip("Optional: your input actions asset (uses Gameplay/Interact). Empty = the E key.")]
     public InputActionAsset inputActions;
     public string prompt = "Press E to talk";
 
     [Header("DialogOnly")]
     [TextArea(2, 4)] public string[] dialogLines = { "Hello, traveller." };
 
-    [Header("KeyQuest - dialog")]
-    [TextArea(2, 4)] public string[] introLines =
+    [Header("Quest")]
+    public List<Stage> stages = new List<Stage>
     {
-        "Oh, it is so hot here!",
-        "Could you put a shadow on that spot over there?",
-        "Help me out and I will reward you."
+        new Stage
+        {
+            label = "Intro",
+            lines = new[]
+            {
+                "Oh, it is so hot here!",
+                "There is a spot over there with something buried. If you shade it, maybe it shows itself.",
+                "Find an umbrella and place it on that spot. Bring me what you find!"
+            }
+        },
+        new Stage
+        {
+            label = "Fix the key",
+            requireItems = new[] { "KeyPiece" },
+            linesWhileWaiting = new[] { "Put an umbrella on the spot over there. I need whatever is hiding in the sand." },
+            lines = new[]
+            {
+                "Ahh, that's cooler already, thank you!",
+                "Is that a piece of a key? Let me see...",
+                "I can fix it. Here, take this key. It opens the pyramid."
+            },
+            takeItems = new[] { "KeyPiece" },
+            giveItems = new[] { "PyramidKey" },
+            notice = "You got the Pyramid Key!"
+        }
     };
-    [TextArea(2, 4)] public string[] waitingLines = { "Please, put a shadow on that spot. It is burning!" };
-    [TextArea(2, 4)] public string[] tradeLines =
-    {
-        "Ahh, so cool now, thank you!",
-        "Is that a piece of a key? Let me see...",
-        "I can fix it. Here, take this key. It opens the pyramid."
-    };
-    [TextArea(2, 4)] public string[] doneLines = { "Good luck inside the pyramid!" };
+    [TextArea(2, 4)] public string[] finishedLines = { "Good luck inside the pyramid!" };
 
-    [Header("KeyQuest - items")]
-    [Tooltip("Id of the broken key piece the player receives when the goal is done.")]
-    public string keyPieceId = "KeyPiece";
-    public string keyPieceName = "Piece of a Key";
-    [Tooltip("Id of the fixed key the NPC gives back. Use the same id on the KeyLock.")]
-    public string fixedKeyId = "PyramidKey";
-    public string fixedKeyName = "Pyramid Key";
+    [Header("Debug")]
+    [SerializeField] private int stageIndex;
 
-    [Header("Events")]
-    public UnityEvent onGoalCompleted;
-    public UnityEvent onKeyGiven;
-
-    private Stage stage = Stage.Intro;
-    private bool goalDone;
     private Transform player;
     private InputAction interactAction;
+    private static NpcInteraction promptOwner;
 
     void Awake()
     {
-        if (inputActions != null)
-        {
-            var map = inputActions.FindActionMap("Gameplay");
-            interactAction = map?.FindAction("Interact");
-        }
+        if (inputActions != null) interactAction = inputActions.FindActionMap("Gameplay")?.FindAction("Interact");
     }
 
     void OnEnable() { interactAction?.Enable(); }
@@ -104,8 +142,6 @@ public class NpcInteraction : MonoBehaviour
         if (inReach && InteractPressed()) Talk();
     }
 
-    private static NpcInteraction promptOwner;
-
     bool CanTalk()
     {
         if ((player.position - transform.position).sqrMagnitude > interactRange * interactRange) return false;
@@ -120,70 +156,63 @@ public class NpcInteraction : MonoBehaviour
         return Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame;
     }
 
-    void Talk()
+    public void Talk()
     {
         var ui = DialogUI.Instance;
-        if (mode == NpcMode.DialogOnly)
-        {
-            ui.Show(npcName, dialogLines);
-            return;
-        }
+        if (mode == NpcMode.DialogOnly) { ui.Show(npcName, dialogLines); return; }
 
-        switch (stage)
+        if (stageIndex >= stages.Count) { ui.Show(npcName, finishedLines); return; }
+
+        Stage st = stages[stageIndex];
+        if (Satisfied(st))
         {
-            case Stage.Intro:
-                ui.Show(npcName, introLines, () =>
-                {
-                    stage = Stage.WaitingForGoal;
-                    TryGivePiece();
-                });
-                break;
-            case Stage.WaitingForGoal:
-                ui.Show(npcName, waitingLines);
-                break;
-            case Stage.HasPiece:
-                ui.Show(npcName, tradeLines, GiveFixedKey);
-                break;
-            default:
-                ui.Show(npcName, doneLines);
-                break;
+            ui.Show(npcName, st.lines, () => Complete(st));
+        }
+        else
+        {
+            var waiting = (st.linesWhileWaiting != null && st.linesWhileWaiting.Length > 0)
+                ? st.linesWhileWaiting
+                : new[] { "Come back when you have what I need." };
+            ui.Show(npcName, waiting);
         }
     }
 
-    /// <summary>
-    /// Call this when the player finished the NPC's task (hook ShadowSpot.onShadowed to it).
-    /// If the player has not heard the intro yet, the piece is given right after it.
-    /// </summary>
-    public void CompleteGoal()
+    bool Satisfied(Stage st)
     {
-        if (mode != NpcMode.KeyQuest || goalDone) return;
-        goalDone = true;
-        onGoalCompleted?.Invoke();
-        TryGivePiece();
-    }
+        if (!QuestFlags.Has(st.requireFlag)) return false;
+        if (st.requireItems == null || st.requireItems.Length == 0) return true;
 
-    void TryGivePiece()
-    {
-        if (!goalDone || stage != Stage.WaitingForGoal) return;
         var inv = PlayerInventory.Instance;
-        if (inv == null) { Debug.LogWarning("NpcInteraction: add a PlayerInventory to the player.", this); return; }
-
-        inv.Add(keyPieceId);
-        stage = Stage.HasPiece;
-        DialogUI.Instance.ShowNotice($"You got: {keyPieceName}. Bring it to {npcName}!");
+        if (inv == null) return false;
+        foreach (var id in st.requireItems)
+            if (!string.IsNullOrEmpty(id) && !inv.Has(id)) return false;
+        return true;
     }
 
-    void GiveFixedKey()
+    void Complete(Stage st)
     {
         var inv = PlayerInventory.Instance;
-        if (inv == null) return;
+        if (inv != null)
+        {
+            if (st.takeItems != null) foreach (var id in st.takeItems) inv.Remove(id);
+            if (st.giveItems != null) foreach (var id in st.giveItems) inv.Add(id);
+        }
+        else if ((st.takeItems?.Length ?? 0) + (st.giveItems?.Length ?? 0) > 0)
+        {
+            Debug.LogWarning("NpcInteraction: add a PlayerInventory to the player so items can be given / taken.", this);
+        }
 
-        inv.Remove(keyPieceId);   // the NPC takes the broken piece...
-        inv.Add(fixedKeyId);      // ...and hands back the fixed key
-        stage = Stage.Done;
-        DialogUI.Instance.ShowNotice($"You got: {fixedKeyName}");
-        onKeyGiven?.Invoke();
+        QuestFlags.Set(st.setFlag);
+        if (!string.IsNullOrEmpty(st.notice)) DialogUI.Instance.ShowNotice(st.notice);
+        st.onComplete?.Invoke();
+        stageIndex++;
     }
+
+    /// <summary>Hook any UnityEvent to this to set a flag, e.g. ShadowSpot.onShadowed -> SetFlag("ShadowDone").</summary>
+    public void SetFlag(string flag) => QuestFlags.Set(flag);
+
+    /// <summary>Jump to a stage (e.g. to reset the NPC).</summary>
+    public void GoToStage(int index) => stageIndex = Mathf.Max(0, index);
 
     void OnDrawGizmosSelected()
     {

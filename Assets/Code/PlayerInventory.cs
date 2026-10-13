@@ -29,7 +29,10 @@ public class PlayerInventory : MonoBehaviour
     void HandleCollected(GameItem item, GameObject collector)
     {
         if (item.type == ItemType.Key && !string.IsNullOrEmpty(item.keyId) && collector.transform.IsChildOf(transform))
+        {
             Add(item.keyId);
+            DialogUI.Instance.ShowNotice($"Picked up: {item.itemName}");
+        }
     }
 
     public void Add(string id, int amount = 1)
