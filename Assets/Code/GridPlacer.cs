@@ -39,6 +39,10 @@ public class GridPlacer : MonoBehaviour
     public Key placeKey = Key.F;
     public Key rotateKey = Key.Q;
 
+    [Header("Debug")]
+    [Tooltip("Logs what the pick-up / placement rays hit, to find out why something does not work.")]
+    public bool debug;
+
     [Header("Look")]
     public Color validColor = new Color(0.4f, 1f, 0.4f, 1f);
     public Color invalidColor = new Color(1f, 0.35f, 0.35f, 1f);
@@ -49,10 +53,31 @@ public class GridPlacer : MonoBehaviour
     private bool canPlace;
     private bool showingPrompt;
     private float yaw;
+    private readonly RaycastHit[] hitBuffer = new RaycastHit[32];
 
     void Start()
     {
         if (playerCamera == null) playerCamera = PlayerFinder.FindCamera(transform);
+        if (playerCamera == null) Debug.LogWarning("GridPlacer: no camera found. Drag the player camera into 'Player Camera'.", this);
+        if (PlayerInventory.Instance == null) Debug.LogWarning("GridPlacer: add a PlayerInventory to the player.", this);
+        if (debug) Debug.Log($"GridPlacer ready. camera={playerCamera}, pick up = {pickUpKey}, place = {placeKey}");
+    }
+
+    /// <summary>Closest hit along the ray that is not part of the player. Triggers count only if wantTriggers says so.</summary>
+    bool CastIgnoringPlayer(Vector3 origin, Vector3 dir, float range, LayerMask mask, bool includeTriggers, out RaycastHit result)
+    {
+        int n = Physics.RaycastNonAlloc(origin, dir, hitBuffer, range, mask, QueryTriggerInteraction.Collide);
+        result = default;
+        float best = float.MaxValue;
+        bool found = false;
+        for (int i = 0; i < n; i++)
+        {
+            var h = hitBuffer[i];
+            if (h.collider.transform.IsChildOf(transform)) continue;                     // the player itself
+            if (h.collider.isTrigger && !(includeTriggers && h.collider.GetComponentInParent<PlaceableObject>() != null)) continue;
+            if (h.distance < best) { best = h.distance; result = h; found = true; }
+        }
+        return found;
     }
 
     void Update()
@@ -68,9 +93,15 @@ public class GridPlacer : MonoBehaviour
     void UpdateIdle()
     {
         PlaceableObject target = null;
-        if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward,
-                out RaycastHit hit, pickUpRange, ~0, QueryTriggerInteraction.Ignore))
+        if (CastIgnoringPlayer(playerCamera.transform.position, playerCamera.transform.forward,
+                pickUpRange, ~0, true, out RaycastHit hit))
+        {
             target = hit.collider.GetComponentInParent<PlaceableObject>();
+            if (debug && Keyboard.current[pickUpKey].wasPressedThisFrame)
+                Debug.Log($"GridPlacer pick-up ray hit '{hit.collider.name}' (PlaceableObject: {(target != null ? "yes" : "NO - add PlaceableObject to the umbrella")})");
+        }
+        else if (debug && Keyboard.current[pickUpKey].wasPressedThisFrame)
+            Debug.Log("GridPlacer pick-up ray hit nothing. Does the umbrella have a Collider? Are you within " + pickUpRange + "m?");
 
         if (target != null)
         {
@@ -163,7 +194,7 @@ public class GridPlacer : MonoBehaviour
         Vector3 dir = playerCamera.transform.forward;
         Quaternion rot = Quaternion.Euler(0f, yaw, 0f);
 
-        if (Physics.Raycast(origin, dir, out RaycastHit hit, placeRange, surfaceMask, QueryTriggerInteraction.Ignore)
+        if (CastIgnoringPlayer(origin, dir, placeRange, surfaceMask, false, out RaycastHit hit)
             && hit.normal.y >= minSurfaceUp)
         {
             Vector3 p = SnapToGrid(hit.point);
@@ -180,12 +211,16 @@ public class GridPlacer : MonoBehaviour
             Vector3 center = b.center + Vector3.up * 0.05f;
             Vector3 half = new Vector3(b.extents.x * 0.95f, Mathf.Max(0.01f, b.extents.y * 0.95f - 0.05f), b.extents.z * 0.95f);
             canPlace = !Physics.CheckBox(center, half, Quaternion.identity, blockMask, QueryTriggerInteraction.Ignore);
+            if (debug && !canPlace && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                Debug.Log("GridPlacer: spot is blocked by another collider (red).");
         }
         else
         {
             // nothing valid to aim at: float at the end of the ray, can't place
             current.transform.SetPositionAndRotation(origin + dir * placeRange, rot);
             canPlace = false;
+            if (debug && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                Debug.Log("GridPlacer: no floor in range / surface too steep. Aim at the ground within " + placeRange + "m.");
         }
 
         current.Tint(canPlace ? validColor : invalidColor);
