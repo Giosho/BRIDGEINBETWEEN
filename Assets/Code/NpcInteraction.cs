@@ -163,6 +163,7 @@ public class NpcInteraction : MonoBehaviour
         var ui = DialogUI.Instance;
         if (mode == NpcMode.DialogOnly) { ui.Show(npcName, dialogLines); return; }
 
+        SkipAheadIfReady();
         if (stageIndex >= stages.Count) { ui.Show(npcName, finishedLines); return; }
 
         Stage st = stages[stageIndex];
@@ -176,6 +177,21 @@ public class NpcInteraction : MonoBehaviour
                 ? st.linesWhileWaiting
                 : new[] { "Come back when you have what I need." };
             ui.Show(npcName, waiting);
+        }
+    }
+
+    // The player may already hold what a LATER stage asks for (e.g. found the key piece before
+    // talking). Jump straight to that stage so the NPC doesn't ignore it.
+    void SkipAheadIfReady()
+    {
+        for (int j = stages.Count - 1; j > stageIndex; j--)
+        {
+            var st = stages[j];
+            if (st.requireItems != null && st.requireItems.Length > 0 && Satisfied(st))
+            {
+                stageIndex = j;
+                return;
+            }
         }
     }
 

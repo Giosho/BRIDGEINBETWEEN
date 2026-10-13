@@ -29,6 +29,8 @@ public class ShadeObject : MonoBehaviour
     public GameObject[] removeWhenShaded;
     [Tooltip("Bring them back if the umbrella is picked up again.")]
     public bool restoreWhenRemoved = true;
+    [Tooltip("Also hide THIS object's own mesh (e.g. the treasure mound this script sits on) when shaded. Triggers stay, so nothing blocks the key.")]
+    public bool hideThisObjectWhenShaded = true;
 
     [Header("Events")]
     public UnityEvent onShaded;
@@ -64,6 +66,18 @@ public class ShadeObject : MonoBehaviour
             if (transform != rm.transform && transform.IsChildOf(rm.transform))
                 transform.SetParent(rm.transform.parent, true);
         }
+    }
+
+    bool UnderReveal(Transform t) => revealObject != null && t.IsChildOf(revealObject.transform);
+
+    // Hides this object's own meshes / solid colliders (but never the key, and never trigger zones).
+    void SetSelfHidden(bool hidden)
+    {
+        if (!hideThisObjectWhenShaded || SelfHosted) return;
+        foreach (var r in GetComponentsInChildren<Renderer>(true))
+            if (!UnderReveal(r.transform)) r.enabled = !hidden;
+        foreach (var c in GetComponentsInChildren<Collider>(true))
+            if (!c.isTrigger && !UnderReveal(c.transform)) c.enabled = !hidden;
     }
 
     void SetRemoved(bool removed)
@@ -122,6 +136,7 @@ public class ShadeObject : MonoBehaviour
         shader = p;
         IsShaded = true;
         SetRemoved(true);
+        SetSelfHidden(true);
         SetRevealed(true);
         onShaded?.Invoke();
     }
@@ -133,7 +148,7 @@ public class ShadeObject : MonoBehaviour
         shader = null;
         IsShaded = false;
         if (hideWhenRemoved) SetRevealed(false);
-        if (restoreWhenRemoved) SetRemoved(false);
+        if (restoreWhenRemoved) { SetRemoved(false); SetSelfHidden(false); }
         onUnshaded?.Invoke();
     }
 
