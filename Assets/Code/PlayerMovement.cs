@@ -117,6 +117,9 @@ public class PlayerMovement : MonoBehaviour
             moveInput = moveAction.ReadValue<Vector2>();
         }
 
+        // Stand still while an NPC dialog is open
+        if (DialogUI.IsOpen) moveInput = Vector2.zero;
+
         // --- 2D BEAN CONTROLS ---
         if (is2DPlayer)
         {

@@ -39,6 +39,8 @@ public class MouseLook3D : MonoBehaviour
     {
         // Camera is frozen while rotating a held object (holding R)
         if (PickUpScript.IsRotatingObject) return;
+        // Camera is frozen while an NPC dialog is open
+        if (DialogUI.IsOpen) return;
         if (Mouse.current == null) return;
         if (Cursor.lockState != CursorLockMode.Locked) return;
 
